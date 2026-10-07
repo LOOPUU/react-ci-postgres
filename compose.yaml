@@ -1,0 +1,53 @@
+# เริ่มฐานข้อมูลก่อน แล้วจึงเริ่ม API และหน้าเว็บตามลำดับ
+services:
+  db:
+    image: postgres:16-alpine
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_DB: ${DB_NAME:-crud_db}
+      POSTGRES_USER: ${DB_USER:-crud_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-local_dev_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  backend:
+    build: ./backend
+    ports:
+      - "127.0.0.1:8080:80"
+    environment:
+      CI_ENVIRONMENT: development
+      app_baseURL: http://localhost:8080/
+      database_default_hostname: db
+      database_default_database: ${DB_NAME:-crud_db}
+      database_default_username: ${DB_USER:-crud_user}
+      database_default_password: ${DB_PASSWORD:-local_dev_password}
+      database_default_DBDriver: Postgre
+      database_default_port: 5432
+    volumes:
+      # แชร์เฉพาะโค้ดแอป ไม่ทับ vendor ที่ติดตั้งภายใน image
+      - ./backend/app:/var/www/html/app
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost/api/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  frontend:
+    build: ./frontend
+    ports:
+      - "127.0.0.1:5173:5173"
+    volumes:
+      - ./frontend/src:/app/src
+    depends_on:
+      backend:
+        condition: service_healthy
+volumes:
+  # เก็บข้อมูลไว้แม้ปิด container ด้วย docker compose down
+  postgres_data:
